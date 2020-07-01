@@ -1,3 +1,6 @@
+if (btoa == null) var btoa = buf => require('buf' + 'fer')['Buf' + 'fer'].from(buf).toString('base64')
+if (atob == null) var atob = buf => new Uint8Array(require('buf' + 'fer')['Buf' + 'fer'].from(buf, 'base64'))
+
 const assert = require('nanoassert')
 
 module.exports = Sha256
@@ -29,21 +32,18 @@ function expand (a, b, c, d) {
   var c_ = ((c >>> 7) | (c << 25)) ^ ((c >>> 18) | (c << 14)) ^ (c >>> 3)
   var d_ = c_ + d
 
-  return (b_ + d_) & 0xffffffff
+  return (b_ + d_) << 0
 }
 
 function compress (state, words) {
   // initialise registers
-  var r = new Uint32Array(8)
-  for (let i = 0; i < 8; i++) r[i] = state[i]
+  var r = state.slice()
 
   // expand message schedule
   const w = new Uint32Array(64)
   for (let i = 0; i < 16; i++) w[i] = words[i]
   for (let i = 16; i < 64; i++) w[i] = expand(w[i - 2], w[i - 7], w[i - 15], w[i - 16])
-
   for (let i = 0; i < 64; i++) round(i)
-
   for (let i = 0; i < 8; i++) state[i] = state[i] + r[i]
 
   function round (n) {
@@ -55,8 +55,8 @@ function compress (state, words) {
     var bigSig0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))
     var bigSig1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))
 
-    var T1 = (h + ch + bigSig1 + w[n] + K[n]) & 0xffffffff
-    var T2 = (bigSig0 + maj) & 0xffffffff
+    var T1 = (h + ch + bigSig1 + w[n] + K[n]) << 0
+    var T2 = (bigSig0 + maj) << 0
 
     r[7] = r[6]
     r[6] = r[5]
@@ -94,21 +94,21 @@ function Sha256 () {
   return this
 }
 
-Sha256.prototype.update = function (input) {
+Sha256.prototype.update = function (input, enc) {
   assert(this.finalised === false, 'Hash instance finalised')
 
-  var len = input.byteLength
+  var [inputBuf, len] = formatInput(input, enc)
 
   var start = this.bytesRead & 0x3f
   this.bytesRead += len
 
   while (len > 0) {
-    loadReverseEndian(this.load, input, BLOCKSIZE - this.pos, this.pos)
+    this.load.set(inputBuf.subarray(0, BLOCKSIZE - this.pos), this.pos)
     len -= BLOCKSIZE - start
     if (len < 0) break
 
     this.pos = 0
-    compress(this.state, this.words)
+    compress(this.state, this.words.map(bswap))
   }
 
   this.pos = this.bytesRead & 0x3f
@@ -116,11 +116,11 @@ Sha256.prototype.update = function (input) {
   return this
 }
 
-Sha256.prototype.digest = function (input) {
+Sha256.prototype.digest = function (enc, offset = 0) {
   assert(this.finalised === false, 'Hash instance finalised')
 
   this.finalised = true
-  this.words[this.pos >> 2] = this.words[this.pos >> 2] | (0x80 << ((3 - this.pos & 3) << 3))
+  this.words[this.pos >> 2] = this.words[this.pos >> 2] | (0x80 << ((this.pos & 3) << 3))
 
   if (this.pos > 0x38) {
     this.words.fill(0, ((this.pos >>> 2) + 1) << 2)
@@ -131,23 +131,70 @@ Sha256.prototype.digest = function (input) {
   this.words.fill(0, ((this.pos >>> 2) + 1) << 2)
 
   const view = new DataView(this.buffer)
-  view.setUint32(56, this.bytesRead / 2 ** 29, true)
-  view.setUint32(60, this.bytesRead << 3, true)
+  view.setUint32(56, this.bytesRead / 2 ** 29)
+  view.setUint32(60, this.bytesRead << 3)
 
-  compress(this.state, this.words)
+  compress(this.state, this.words.map(bswap))
 
-  return this.state.buffer
-}
+  const resultBuf = new Uint8Array(this.state.map(bswap).buffer)
 
-function signedInt (n) {
-  return n < 0 ? 2 ** 32 + n : n
-}
-
-function loadReverseEndian (out, input, len, offset) {
-  console.log(arguments)
-  for (let i = 0; i < Math.min(input.byteLength, len); i += 4) {
-    for (let j = 3; j >= 0; j--) {
-      out[offset + i + 3 - j] = input[i + j]
-    }
+  if (!enc) {
+    return new Uint8Array(resultBuf)
   }
+
+  if (typeof enc === 'string') {
+    if (enc === 'hex') return hexSlice(resultBuf, 0, resultBuf.length)
+    if (enc === 'utf8' || enc === 'utf-8') return new TextEncoder().encode(resultBuf)
+    if (enc === 'base64') return btoa(resultBuf)
+    throw new Error('Encoding: ' + enc + ' not supported')
+  }
+
+  assert(enc instanceof Uint8Array, 'input must be Uint8Array or Buffer')
+  assert(enc.byteLength >= this.digestLength + offset, 'input not large enough for digest')
+
+  for (let i = 0; i < this.digestLength; i++) {
+    enc[i + offset] = resultBuf[i]
+  }
+
+  return enc
+}
+
+function hexSlice (buf, start = 0, len) {
+  if (!len) len = buf.byteLength
+
+  var str = ''
+  for (var i = 0; i < len; i++) str += toHex(buf[start + i])
+  return str
+}
+
+function toHex (n) {
+  if (n < 16) return '0' + n.toString(16)
+  return n.toString(16)
+}
+
+function formatInput (input, enc) {
+  var result = input instanceof Uint8Array ? input : strToBuf(input, enc)
+
+  return [result, result.byteLength]
+}
+
+function strToBuf (input, enc) {
+  if (enc === 'hex') return hex2bin(input)
+  else if (enc === 'utf8' || enc === 'utf-8') return new TextDecoder().decode(input)
+  else if (enc === 'base64') return atob(input)
+  else throw new Error('Encoding: ' + enc + ' not supported')
+}
+
+function hex2bin (str) {
+  if (str.length % 2 !== 0) return hex2bin('0' + str)
+  var ret = new Uint8Array(str.length / 2)
+  for (var i = 0; i < ret.length; i++) ret[i] = Number('0x' + str.substring(2 * i, 2 * i + 2))
+  return ret
+}
+
+function bswap (a) {
+  var r = ((a & 0x00ff00ff) >>> 8) | ((a & 0x00ff00ff) << 24)
+  var l = ((a & 0xff00ff00) << 8) | ((a & 0xff00ff00) >>> 24)
+
+  return r | l
 }
