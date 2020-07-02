@@ -13,7 +13,7 @@ module.exports.ready = function (cb) {
   })
 }
 
-module.exports.WASM_SUPPORTED = wasm.SUPPORTED
+module.exports.WASM_SUPPORTED = wasm.WASM_SUPPORTED
 module.exports.WASM_LOADED = false
 
 var SHA256_BYTES = module.exports.SHA256_BYTES = 32
