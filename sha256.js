@@ -224,11 +224,3 @@ function bswap (a) {
 
   return r | l
 }
-
-function printWords (w) {
-  for (let i = 0; i < w.length; i++) console.log(signedInt(w[i]).toString(16))
-}
-
-function signedInt (i) {
-  return i < 0 ? 2 ** 32 + i : i
-}
