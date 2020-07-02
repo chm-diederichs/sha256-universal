@@ -1,6 +1,6 @@
 {
   "name": "sha256-universal",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sha256 hashing algorithm in both WASM and pure JS",
   "main": "index.js",
   "author": "Christophe Diederichs",
