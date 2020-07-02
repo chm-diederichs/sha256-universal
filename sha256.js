@@ -27,45 +27,68 @@ const K = [
 ]
 
 function expand (a, b, c, d) {
-  var a_ = ((a >>> 17) | (a << 15)) ^ ((a >>> 19) | (a << 13)) ^ (a >>> 10)
-  var b_ = a_ + b
-  var c_ = ((c >>> 7) | (c << 25)) ^ ((c >>> 18) | (c << 14)) ^ (c >>> 3)
-  var d_ = c_ + d
+  var b_ = (((a >>> 17) | (a << 15)) ^ ((a >>> 19) | (a << 13)) ^ (a >>> 10)) + b
+  var d_ = (((c >>> 7) | (c << 25)) ^ ((c >>> 18) | (c << 14)) ^ (c >>> 3)) + d
 
   return (b_ + d_) << 0
 }
 
 function compress (state, words) {
   // initialise registers
-  var r = state.slice()
+  var ch, maj, s0, s1, T1, T2
+  var [a, b, c, d, e, f, g, h] = state
 
   // expand message schedule
   const w = new Uint32Array(64)
-  for (let i = 0; i < 16; i++) w[i] = words[i]
+  for (let i = 0; i < 16; i++) w[i] = bswap(words[i])
   for (let i = 16; i < 64; i++) w[i] = expand(w[i - 2], w[i - 7], w[i - 15], w[i - 16])
-  for (let i = 0; i < 64; i++) round(i)
-  for (let i = 0; i < 8; i++) state[i] = state[i] + r[i]
+  for (let i = 0; i < 64; i += 4) round(i)
+
+  state[0] = state[0] + a
+  state[1] = state[1] + b
+  state[2] = state[2] + c
+  state[3] = state[3] + d
+  state[4] = state[4] + e
+  state[5] = state[5] + f
+  state[6] = state[6] + g
+  state[7] = state[7] + h
 
   function round (n) {
-    var [a, b, c, d, e, f, g, h] = r
+    ch = (e & f) ^ (~e & g)
+    maj = (a & b) ^ (a & c) ^ (b & c)
+    s0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))
+    s1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))
+    T1 = h + ch + s1 + w[n] + K[n]
+    T2 = s0 + maj
+    h = d + T1
+    d = T1 + T2
 
-    var ch = (e & f) ^ (~e & g)
-    var maj = (a & b) ^ (a & c) ^ (b & c)
+    ch = (h & e) ^ (~h & f)
+    maj = (d & a) ^ (d & b) ^ (a & b)
+    s0 = ((d >>> 2) | (d << 30)) ^ ((d >>> 13) | (d << 19)) ^ ((d >>> 22) | (d << 10))
+    s1 = ((h >>> 6) | (h << 26)) ^ ((h >>> 11) | (h << 21)) ^ ((h >>> 25) | (h << 7))
+    T1 = g + ch + s1 + w[n + 1] + K[n + 1]
+    T2 = s0 + maj
+    g = c + T1
+    c = T1 + T2
 
-    var bigSig0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))
-    var bigSig1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))
+    ch = (g & h) ^ (~g & e)
+    maj = (c & d) ^ (c & a) ^ (d & a)
+    s0 = ((c >>> 2) | (c << 30)) ^ ((c >>> 13) | (c << 19)) ^ ((c >>> 22) | (c << 10))
+    s1 = ((g >>> 6) | (g << 26)) ^ ((g >>> 11) | (g << 21)) ^ ((g >>> 25) | (g << 7))
+    T1 = f + ch + s1 + w[n + 2] + K[n + 2]
+    T2 = s0 + maj
+    f = b + T1
+    b = T1 + T2
 
-    var T1 = (h + ch + bigSig1 + w[n] + K[n]) << 0
-    var T2 = (bigSig0 + maj) << 0
-
-    r[7] = r[6]
-    r[6] = r[5]
-    r[5] = r[4]
-    r[4] = r[3] + T1
-    r[3] = r[2]
-    r[2] = r[1]
-    r[1] = r[0]
-    r[0] = T1 + T2
+    ch = (f & g) ^ (~f & h)
+    maj = (b & c) ^ (b & d) ^ (c & d)
+    s0 = ((b >>> 2) | (b << 30)) ^ ((b >>> 13) | (b << 19)) ^ ((b >>> 22) | (b << 10))
+    s1 = ((f >>> 6) | (f << 26)) ^ ((f >>> 11) | (f << 21)) ^ ((f >>> 25) | (f << 7))
+    T1 = e + ch + s1 + w[n + 3] + K[n + 3]
+    T2 = s0 + maj
+    e = a + T1
+    a = T1 + T2
   }
 }
 
@@ -80,6 +103,7 @@ function Sha256 () {
 
   this.load = new Uint8Array(this.buffer)
   this.words = new Uint32Array(this.buffer)
+
   this.state = new Uint32Array([
     0x6a09e667,
     0xbb67ae85,
@@ -98,43 +122,45 @@ Sha256.prototype.update = function (input, enc) {
   assert(this.finalised === false, 'Hash instance finalised')
 
   var [inputBuf, len] = formatInput(input, enc)
-
-  var start = this.bytesRead & 0x3f
+  var i = 0
   this.bytesRead += len
 
   while (len > 0) {
-    this.load.set(inputBuf.subarray(0, BLOCKSIZE - this.pos), this.pos)
-    len -= BLOCKSIZE - start
+    this.load.set(inputBuf.subarray(i, i + BLOCKSIZE - this.pos), this.pos)
+    i += BLOCKSIZE - this.pos
+    len -= BLOCKSIZE - this.pos
+
     if (len < 0) break
 
     this.pos = 0
-    compress(this.state, this.words.map(bswap))
+    compress(this.state, this.words)
   }
 
   this.pos = this.bytesRead & 0x3f
+  this.load.fill(0, this.pos)
 
   return this
 }
 
 Sha256.prototype.digest = function (enc, offset = 0) {
   assert(this.finalised === false, 'Hash instance finalised')
-
   this.finalised = true
-  this.words[this.pos >> 2] = this.words[this.pos >> 2] | (0x80 << ((this.pos & 3) << 3))
 
-  if (this.pos > 0x38) {
-    this.words.fill(0, ((this.pos >>> 2) + 1) << 2)
+  this.load.fill(0, this.pos)
+  this.load[this.pos] = 0x80
+
+  if (this.pos > 55) {
     compress(this.state, this.words)
+
+    this.words.fill(0)
     this.pos = 0
   }
-
-  this.words.fill(0, ((this.pos >>> 2) + 1) << 2)
 
   const view = new DataView(this.buffer)
   view.setUint32(56, this.bytesRead / 2 ** 29)
   view.setUint32(60, this.bytesRead << 3)
 
-  compress(this.state, this.words.map(bswap))
+  compress(this.state, this.words)
 
   const resultBuf = new Uint8Array(this.state.map(bswap).buffer)
 
@@ -197,4 +223,12 @@ function bswap (a) {
   var l = ((a & 0xff00ff00) << 8) | ((a & 0xff00ff00) >>> 24)
 
   return r | l
+}
+
+function printWords (w) {
+  for (let i = 0; i < w.length; i++) console.log(signedInt(w[i]).toString(16))
+}
+
+function signedInt (i) {
+  return i < 0 ? 2 ** 32 + i : i
 }

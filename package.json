@@ -1,0 +1,14 @@
+{
+  "name": "sha256-universal",
+  "version": "0.0.0",
+  "description": "",
+  "main": "cronobench.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "cronometro": "^0.4.0"
+  }
+}
