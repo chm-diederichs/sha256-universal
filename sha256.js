@@ -185,6 +185,47 @@ Sha256.prototype.digest = function (enc, offset = 0) {
   return enc
 }
 
+function HMAC (key) {
+  if (!(this instanceof HMAC)) return new HMAC(key)
+
+  this.pad = Buffer.alloc(64)
+  this.inner = Sha256()
+  this.outer = Sha256()
+
+  const keyhash = Buffer.alloc(32)
+  if (key.byteLength > 64) {
+    Sha256().update(key).digest(keyhash)
+    key = keyhash
+  }
+
+  this.pad.fill(0x36)
+  for (let i = 0; i < key.byteLength; i++) {
+    this.pad[i] ^= key[i]
+  }
+  this.inner.update(this.pad)
+
+  this.pad.fill(0x5c)
+  for (let i = 0; i < key.byteLength; i++) {
+    this.pad[i] ^= key[i]
+  }
+  this.outer.update(this.pad)
+
+  this.pad.fill(0)
+  keyhash.fill(0)
+}
+
+HMAC.prototype.update = function (input, enc) {
+  this.inner.update(input, enc)
+  return this
+}
+
+HMAC.prototype.digest = function (enc, offset = 0) {
+  this.outer.update(this.inner.digest())
+  return this.outer.digest(enc, offset)
+}
+
+Sha256.HMAC = HMAC
+
 function hexSlice (buf, start = 0, len) {
   if (!len) len = buf.byteLength
 

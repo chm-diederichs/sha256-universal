@@ -6,10 +6,10 @@
   "author": "Christophe Diederichs",
   "license": "ISC",
   "dependencies": {
-    "sha256-wasm": "^2.0.3"
+    "sha256-wasm": "^2.1.0"
   },
   "devDependencies": {
-    "sha-test": "^1.0.0"
+    "sha-test": "^1.1.0"
   },
   "scripts": {
     "test": "node test"
