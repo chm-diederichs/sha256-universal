@@ -6,7 +6,7 @@
   "author": "Christophe Diederichs",
   "license": "ISC",
   "dependencies": {
-    "sha256-wasm": "^2.1.0"
+    "sha256-wasm": "^2.2.0"
   },
   "devDependencies": {
     "sha-test": "^1.1.0"
