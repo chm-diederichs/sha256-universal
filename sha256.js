@@ -1,7 +1,5 @@
-if (btoa == null) var btoa = buf => require('buf' + 'fer')['Buf' + 'fer'].from(buf).toString('base64')
-if (atob == null) var atob = buf => new Uint8Array(require('buf' + 'fer')['Buf' + 'fer'].from(buf, 'base64'))
-
 const assert = require('nanoassert')
+const b4a = require('b4a')
 
 module.exports = Sha256
 const SHA256_BYTES = module.exports.SHA256_BYTES = 32
@@ -169,10 +167,7 @@ Sha256.prototype.digest = function (enc, offset = 0) {
   }
 
   if (typeof enc === 'string') {
-    if (enc === 'hex') return hexSlice(resultBuf, 0, resultBuf.length)
-    if (enc === 'utf8' || enc === 'utf-8') return new TextEncoder().encode(resultBuf)
-    if (enc === 'base64') return btoa(resultBuf)
-    throw new Error('Encoding: ' + enc + ' not supported')
+    return b4a.toString(resultBuf, enc)
   }
 
   assert(enc instanceof Uint8Array, 'input must be Uint8Array or Buffer')
@@ -188,11 +183,11 @@ Sha256.prototype.digest = function (enc, offset = 0) {
 function HMAC (key) {
   if (!(this instanceof HMAC)) return new HMAC(key)
 
-  this.pad = Buffer.alloc(64)
+  this.pad = b4a.alloc(64)
   this.inner = Sha256()
   this.outer = Sha256()
 
-  const keyhash = Buffer.alloc(32)
+  const keyhash = b4a.alloc(32)
   if (key.byteLength > 64) {
     Sha256().update(key).digest(keyhash)
     key = keyhash
@@ -226,37 +221,10 @@ HMAC.prototype.digest = function (enc, offset = 0) {
 
 Sha256.HMAC = HMAC
 
-function hexSlice (buf, start = 0, len) {
-  if (!len) len = buf.byteLength
-
-  var str = ''
-  for (var i = 0; i < len; i++) str += toHex(buf[start + i])
-  return str
-}
-
-function toHex (n) {
-  if (n < 16) return '0' + n.toString(16)
-  return n.toString(16)
-}
-
 function formatInput (input, enc) {
-  var result = input instanceof Uint8Array ? input : strToBuf(input, enc)
+  var result = b4a.from(input, enc)
 
   return [result, result.byteLength]
-}
-
-function strToBuf (input, enc) {
-  if (enc === 'hex') return hex2bin(input)
-  else if (enc === 'utf8' || enc === 'utf-8') return new TextDecoder().decode(input)
-  else if (enc === 'base64') return atob(input)
-  else throw new Error('Encoding: ' + enc + ' not supported')
-}
-
-function hex2bin (str) {
-  if (str.length % 2 !== 0) return hex2bin('0' + str)
-  var ret = new Uint8Array(str.length / 2)
-  for (var i = 0; i < ret.length; i++) ret[i] = Number('0x' + str.substring(2 * i, 2 * i + 2))
-  return ret
 }
 
 function bswap (a) {
