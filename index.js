@@ -20,7 +20,7 @@ var SHA256_BYTES = module.exports.SHA256_BYTES = 32
 
 wasm.ready(function (err) {
   if (!err) {
-    module.exports.WASM_LOADED = true
     module.exports = Proto = wasm
+    module.exports.WASM_LOADED = true
   }
 })
